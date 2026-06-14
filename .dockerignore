@@ -1,0 +1,16 @@
+.git
+.github
+venv
+.venv
+__pycache__
+node_modules
+dist
+build
+.env
+*.log
+*.pyc
+.DS_Store
+backups/*.tar.gz
+*.joblib
+.vscode
+.idea

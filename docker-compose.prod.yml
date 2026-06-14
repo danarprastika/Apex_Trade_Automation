@@ -58,6 +58,8 @@ services:
       IS_LIVE_TRADING: ${IS_LIVE_TRADING:-false}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    volumes:
+      - ./logs/backend:/app/logs
 
   telegram-bot:
     build:
@@ -72,6 +74,8 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       API_BASE_URL: http://backend:8000
     command: python bot.py
+    volumes:
+      - ./logs/telegram:/app/logs
 
   frontend:
     build:
@@ -81,6 +85,8 @@ services:
     restart: always
     depends_on:
       - backend
+    volumes:
+      - ./logs/frontend:/usr/share/nginx/html/logs
 
 volumes:
   postgres-data:
