@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.core.rate_limit import limiter
+from app.core.rate_limit import INTERNAL_API_LIMIT, limiter
 from app.database.base import get_db
 from app.database.models.ai_memory import AIModel, Prediction
 
@@ -39,8 +39,8 @@ router = APIRouter()
 
 
 @router.get("/models", response_model=list[ModelOut])
-@limiter.limit("30/minute")
-def list_ai_models(db: Session = Depends(get_db)):
+@limiter.limit(INTERNAL_API_LIMIT)
+def list_ai_models(request: Request, db: Session = Depends(get_db)):
     rows = db.execute(select(AIModel).order_by(desc(AIModel.created_at))).scalars().all()
     return [
         ModelOut(
@@ -57,8 +57,8 @@ def list_ai_models(db: Session = Depends(get_db)):
 
 
 @router.get("/predictions", response_model=list[PredictionOut])
-@limiter.limit("30/minute")
-def list_predictions(db: Session = Depends(get_db)):
+@limiter.limit(INTERNAL_API_LIMIT)
+def list_predictions(request: Request, db: Session = Depends(get_db)):
     rows = db.execute(select(Prediction).order_by(desc(Prediction.created_at)).limit(200)).scalars().all()
     return [
         PredictionOut(

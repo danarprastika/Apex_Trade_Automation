@@ -1,3 +1,5 @@
+import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Protocol
@@ -6,9 +8,12 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.core.config.settings import settings
+from app.core.retry import retry_sync
 from app.database.base import get_db
 from app.database.models.market import Candle, MarketPair
 from app.database.models.portfolio import PortfolioSnapshot
+
+logger = logging.getLogger(__name__)
 
 
 class BaseSentimentEngine(Protocol):
@@ -18,12 +23,18 @@ class BaseSentimentEngine(Protocol):
 
 class SentimentAnalyzer:
     def __init__(self) -> None:
-        self.ollama_url = getattr(settings, "OLLAMA_API_URL", "http://localhost:11434")
+        self.ollama_url = settings.OLLAMA_API_URL.rstrip("/")
         self.model_name = getattr(settings, "OLLAMA_MODEL", "llama3")
 
-    def analyze(self, text: str) -> dict | None:
+    @retry_sync
+    def _generate(self, payload: dict) -> dict:
         import httpx
 
+        resp = httpx.post(f"{self.ollama_url}/api/generate", json=payload, timeout=20)
+        resp.raise_for_status()
+        return resp.json()
+
+    def analyze(self, text: str) -> dict | None:
         if not text:
             return None
         prompt = (
@@ -34,15 +45,13 @@ class SentimentAnalyzer:
         )
         payload = {"model": self.model_name, "prompt": prompt, "format": "json", "stream": False}
         try:
-            resp = httpx.post(f"{self.ollama_url}/api/generate", json=payload, timeout=20)
-            resp.raise_for_status()
-            data = resp.json()
+            data = self._generate(payload)
             response_text = data.get("response", "")
             if not response_text:
                 return None
-            import json
             return json.loads(response_text)
         except Exception:
+            logger.exception("ollama_sentiment_analysis_failed")
             return None
 
 

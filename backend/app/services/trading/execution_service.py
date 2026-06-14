@@ -1,12 +1,12 @@
 import logging
 from datetime import UTC, datetime
 from typing import Literal
-from urllib.parse import urljoin
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config.settings import settings
+from app.core.retry import retry_sync
 from app.database.models.risk import PaperTrade, TradeSide, TradeStatus
 from app.database.models.trading import Signal
 from app.database.repositories.audit_repository import create_audit_log
@@ -17,20 +17,25 @@ logger = logging.getLogger(__name__)
 SideLiteral = Literal["BUY", "SELL"]
 
 
+@retry_sync
+def _post_telegram_message(url: str, payload: dict) -> None:
+    response = httpx.post(url, json=payload, timeout=10)
+    response.raise_for_status()
+
+
 def _send_telegram_alert(chat_id: str, text: str) -> None:
     token = settings.TELEGRAM_BOT_TOKEN
     if not token:
         logger.warning("Telegram bot token not configured; skipping alert")
         return
 
-    url = urljoin(f"https://api.telegram.org/bot{token}/", "sendMessage")
+    url = f"{settings.TELEGRAM_API_BASE_URL.rstrip('/')}/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
 
     try:
-        response = httpx.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        logger.error("Failed to send telegram alert: %s", exc)
+        _post_telegram_message(url, payload)
+    except Exception as exc:
+        logger.error("Failed to send telegram alert after retries: %s", exc)
 
 
 def _build_trade_notification(trade: PaperTrade, live: bool = False) -> str:

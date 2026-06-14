@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import limiter
@@ -25,7 +25,7 @@ def register(email: str, username: str, password: str, db: Session = Depends(get
 
 @router.post("/login")
 @limiter.limit("5/minute")
-def login(email: str, password: str, db: Session = Depends(get_db)):
+def login(request: Request, email: str, password: str, db: Session = Depends(get_db)):
     user = get_user_by_email(db, email)
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")

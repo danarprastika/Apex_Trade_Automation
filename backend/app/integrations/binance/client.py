@@ -1,4 +1,11 @@
+import logging
+
 import ccxt.async_support as ccxt
+
+from app.core.config.settings import settings
+from app.core.retry import retry_async
+
+logger = logging.getLogger(__name__)
 
 
 class BinanceClient:
@@ -10,9 +17,10 @@ class BinanceClient:
             "options": {"defaultType": "spot"},
         }
         if testnet:
-            config["urls"] = {"api": "https://testnet.binance.vision/api"}
+            config["urls"] = {"api": settings.BINANCE_TESTNET_URL.rstrip("/")}
         self.exchange = ccxt.binance(config)
 
+    @retry_async
     async def get_assets(self):
         markets = await self.exchange.load_markets()
         assets = set()
@@ -22,6 +30,7 @@ class BinanceClient:
                 assets.update(parts)
         return sorted(list(assets))
 
+    @retry_async
     async def get_trading_pairs(self):
         markets = await self.exchange.load_markets()
         pairs = []
@@ -36,6 +45,7 @@ class BinanceClient:
             )
         return pairs
 
+    @retry_async
     async def get_ohlcv(self, symbol: str, timeframe: str = "1h", limit: int = 500):
         ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         return [

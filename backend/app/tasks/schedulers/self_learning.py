@@ -28,14 +28,16 @@ class SelfLearningScheduler:
         self.engine = DigitalTwinEngine()
 
     def register(self) -> None:
+        if self.scheduler is None:
+            return
         self.scheduler.add_job(
             _build_self_learning_job(self._run_daily_assessment),
             trigger=CronTrigger(hour=0, minute=0),
             id="self_learning_daily",
             name="self_learning_daily_assessment",
             max_instances=1,
-            coalesce=True,
-            misfire_grace_time=3600,
+            coalesce=False,
+            misfire_grace_time=None,
         )
 
     async def _run_daily_assessment(self) -> None:

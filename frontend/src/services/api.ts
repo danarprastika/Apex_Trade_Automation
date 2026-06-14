@@ -23,12 +23,12 @@ export const runBacktest = async (payload: {
   symbol?: string;
   timeframe?: string;
 }) => {
-  const { data } = await api.post("/api/v1/backtests/run", payload);
+  const { data } = await api.post("/v1/backtests/run", payload);
   return data;
 };
 
 export const getBacktestResults = async () => {
-  const { data } = await api.get("/api/v1/backtests/results");
+  const { data } = await api.get("/v1/backtests/results");
   return data;
 };
 

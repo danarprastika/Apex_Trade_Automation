@@ -4,4 +4,9 @@ from slowapi.util import get_remote_address
 
 from app.core.config.settings import settings
 
-limiter = Limiter(key_func=get_remote_address)
+INTERNAL_API_LIMIT = "1000/minute"
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=(INTERNAL_API_LIMIT,),
+)

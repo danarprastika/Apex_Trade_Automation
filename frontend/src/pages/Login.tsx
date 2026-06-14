@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { api } from '@/services/api'
@@ -8,7 +8,7 @@ export default function Login() {
   const setSession = useAuthStore((s) => s.setSession)
   const [error, setError] = useState<string | null>(null)
 
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const data = new FormData(e.currentTarget)
     const email = String(data.get('email') || '').trim()

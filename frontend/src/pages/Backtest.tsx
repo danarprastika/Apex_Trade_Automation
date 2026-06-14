@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import ReactECharts from "echarts-for-react";
 import { api } from "@/services/api";
-
-type CandlePoint = [number, number, number, number, number];
 
 type BacktestResult = {
   backtest_id: string;
@@ -24,7 +21,7 @@ export default function Backtest() {
   const run = async () => {
     setLoading(true);
     try {
-      const { data } = await api.post("/api/v1/backtests/run", {
+      const { data } = await api.post("/v1/backtests/run", {
         strategy_id: strategyId || "EMA_CROSS_V1",
         start_date: startDate || new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(),
         end_date: endDate || new Date().toISOString(),
@@ -39,7 +36,7 @@ export default function Backtest() {
   };
 
   const loadHistory = async () => {
-    const { data } = await api.get("/api/v1/backtests/results");
+    const { data } = await api.get("/v1/backtests/results");
     setHistory(data?.data ?? []);
   };
 

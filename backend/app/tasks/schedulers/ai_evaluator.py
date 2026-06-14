@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func
@@ -7,6 +8,8 @@ from app.core.config.settings import settings
 from app.database.base import get_db
 from app.database.models.ai_memory import AIModel, Prediction
 from app.database.models.market import Candle, MarketPair
+
+logger = logging.getLogger(__name__)
 
 
 def _latest_price_for_symbol(db: Session, symbol: str):
@@ -30,8 +33,9 @@ def _evaluate_one(pred: Prediction, db: Session) -> None:
 
 
 def evaluate_predictions() -> None:
-    db: Session = next(get_db())
+    db: Session | None = None
     try:
+        db = next(get_db())
         cutoff = datetime.now(UTC) - timedelta(hours=1)
         rows = db.query(Prediction).filter(Prediction.created_at <= cutoff, Prediction.is_correct.is_(None)).all()
         for pred in rows:
@@ -48,5 +52,10 @@ def evaluate_predictions() -> None:
             model.accuracy_score = float(acc) if acc is not None else None
             db.add(model)
         db.commit()
+    except Exception:
+        if db is not None and db.in_transaction():
+            db.rollback()
+        logger.exception("ai_prediction_evaluation_failed")
     finally:
-        db.close()
+        if db is not None:
+            db.close()

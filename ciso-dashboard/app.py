@@ -9,8 +9,11 @@ from sqlalchemy import create_engine, text
 load_dotenv()
 st.set_page_config(page_title="CISO Command Center", layout="wide")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://apex:apex_password@localhost:5432/apex_db")
-engine = create_engine(DATABASE_URL)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    st.error("DATABASE_URL is not configured")
+    st.stop()
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 st.title("CISO Command & Intelligence Center")
 st.caption("Read-only operational dashboard for APEX Financial Intelligence Platform")

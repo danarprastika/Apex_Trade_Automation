@@ -1,14 +1,13 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import { api } from "@/services/api";
 
 type CandlePoint = [number, number, number, number, number];
 
-const candlesQuery = (symbol: string) =>
-  queryOptions({
+const candlesQuery = (symbol: string) => ({
     queryKey: ["candles", symbol],
     queryFn: async () => {
-      const { data, status } = await api.get(`/api/v1/market/candles/${symbol}`);
+      const { data, status } = await api.get(`/v1/market/candles/${symbol}`);
       if (status !== 200) throw new Error("Failed to load candles");
       return (data?.data ?? []) as CandlePoint[];
     },

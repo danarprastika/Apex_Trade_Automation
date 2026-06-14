@@ -8,6 +8,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.core.config.settings import settings
+from app.core.retry import retry_async
 from app.database.base import get_db
 from app.database.models.intelligence import NewsArticle
 
@@ -16,39 +17,44 @@ logger = logging.getLogger(__name__)
 RSS_FEEDS = getattr(settings, "NEWS_RSS_FEEDS", "").split(",") if getattr(settings, "NEWS_RSS_FEEDS", None) else []
 
 
+@retry_async
 async def _fetch_feed(url: str) -> List[dict]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url.strip())
+        resp.raise_for_status()
+    parsed = feedparser.parse(resp.text)
+    articles: List[dict] = []
+    for entry in parsed.entries[:20]:
+        title = getattr(entry, "title", "")
+        link = getattr(entry, "link", "")
+        published = getattr(entry, "published_parsed", None)
+        published_at = datetime(*published[:6]) if published else datetime.utcnow()
+        content = ""
+        summary = getattr(entry, "summary", "")
+        try:
+            content = BeautifulSoup(summary, "html.parser").get_text(" ", strip=True)
+        except Exception:
+            content = summary
+        articles.append({
+            "title": title,
+            "url": link,
+            "source": parsed.feed.get("title", ""),
+            "published_at": published_at,
+            "content": content,
+        })
+    return articles
+
+
+async def _safe_fetch_feed(url: str) -> List[dict]:
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url.strip())
-            resp.raise_for_status()
-        parsed = feedparser.parse(resp.text)
-        articles: List[dict] = []
-        for entry in parsed.entries[:20]:
-            title = getattr(entry, "title", "")
-            link = getattr(entry, "link", "")
-            published = getattr(entry, "published_parsed", None)
-            published_at = datetime(*published[:6]) if published else datetime.utcnow()
-            content = ""
-            summary = getattr(entry, "summary", "")
-            try:
-                content = BeautifulSoup(summary, "html.parser").get_text(" ", strip=True)
-            except Exception:
-                content = summary
-            articles.append({
-                "title": title,
-                "url": link,
-                "source": parsed.feed.get("title", ""),
-                "published_at": published_at,
-                "content": content,
-            })
-        return articles
+        return await _fetch_feed(url)
     except Exception as exc:
-        logger.error("Failed to fetch feed %s: %s", url, exc)
+        logger.error("Failed to fetch feed %s after retries: %s", url, exc)
         return []
 
 
 async def fetch_latest_news() -> List[dict]:
-    tasks = [_fetch_feed(url) for url in RSS_FEEDS]
+    tasks = [_safe_fetch_feed(url) for url in RSS_FEEDS]
     results = await asyncio.gather(*tasks, return_exceptions=False)
     articles: List[dict] = []
     seen = set()

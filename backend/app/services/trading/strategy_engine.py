@@ -1,3 +1,6 @@
+import asyncio
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 import pandas as pd
@@ -6,6 +9,11 @@ from ta.trend import EMAIndicator
 from app.database.base import get_db
 from app.database.models.market import Candle, MarketPair
 from app.database.repositories.strategy_repository import create_signal, get_strategy_by_code
+
+logger = logging.getLogger(__name__)
+
+STRATEGY_EXECUTOR_WORKERS = 8
+strategy_executor = ThreadPoolExecutor(max_workers=STRATEGY_EXECUTOR_WORKERS, thread_name_prefix="strategy-engine")
 
 
 class BaseStrategy(Protocol):
@@ -69,6 +77,7 @@ class AIPredictionStrategy:
 
     def __init__(self, min_confidence: float = 0.75, model_name: str = "btc_rf_v1"):
         from app.services.ai.prediction_engine import MachineLearningEngine
+
         self.min_confidence = min_confidence
         self.engine = MachineLearningEngine()
         self.model_name = model_name
@@ -76,7 +85,11 @@ class AIPredictionStrategy:
     def evaluate(self, df: pd.DataFrame, pair_symbol: str) -> dict | None:
         if df is None or df.empty or len(df) < 2:
             return None
-        result = self.engine.predict_next_move(pair_symbol, df)
+        try:
+            result = self.engine.predict_next_move(pair_symbol, df)
+        except Exception:
+            logger.exception("ai_prediction_strategy_failed", symbol=pair_symbol)
+            return None
         if not result:
             return None
         if result.get("confidence_score", 0) < self.min_confidence:
@@ -126,7 +139,7 @@ def _load_candles_as_df(symbol: str, timeframe: str = "1h", limit: int = 200) ->
         db.close()
 
 
-def run_strategy(symbol: str, timeframe: str = "1h") -> None:
+def _run_strategy_sync(symbol: str, timeframe: str = "1h") -> None:
     db = next(get_db())
     try:
         strategy = get_strategy_by_code(db, EMACrossStrategy.code)
@@ -155,39 +168,16 @@ def run_strategy(symbol: str, timeframe: str = "1h") -> None:
             entry_price=result.get("entry_price"),
             reason=result.get("reason"),
         )
+    except Exception:
+        logger.exception("strategy_execution_failed", symbol=symbol, timeframe=timeframe)
     finally:
         db.close()
 
 
 def run_strategy(symbol: str, timeframe: str = "1h") -> None:
-    strategy_code = EMACrossStrategy.code
-    db = next(get_db())
-    try:
-        strategy = get_strategy_by_code(db, strategy_code)
-        if not strategy:
-            return
+    _run_strategy_sync(symbol, timeframe)
 
-        pair = db.query(MarketPair).filter(MarketPair.symbol == symbol).first()
-        if not pair:
-            return
 
-        df = _load_candles_as_df(symbol, timeframe)
-        if df.empty:
-            return
-
-        engine = EMACrossStrategy()
-        result = engine.evaluate(df, symbol)
-        if not result:
-            return
-
-        create_signal(
-            db,
-            strategy_id=strategy.id,
-            market_pair_id=pair.id,
-            signal_type=result["signal_type"],
-            confidence=result.get("confidence"),
-            entry_price=result.get("entry_price"),
-            reason=result.get("reason"),
-        )
-    finally:
-        db.close()
+async def run_strategy_async(symbol: str, timeframe: str = "1h") -> None:
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(strategy_executor, _run_strategy_sync, symbol, timeframe)

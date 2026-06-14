@@ -5,6 +5,8 @@ from typing import Protocol
 import pandas as pd
 from ta.trend import EMAIndicator
 
+from sqlalchemy.orm import Session
+
 from app.core.config.settings import settings
 from app.database.base import get_db
 from app.database.models.market import Candle, MarketPair
@@ -13,7 +15,7 @@ from app.database.repositories.backtest_repository import create_backtest_run
 
 
 class BaseStrategy(Protocol):
-    evaluate(self, df: pd.DataFrame, pair_symbol: str) -> dict | None:
+    def evaluate(self, df: pd.DataFrame, pair_symbol: str) -> dict | None:
         ...
 
 

@@ -30,8 +30,8 @@ export default function Intelligence() {
   const load = async () => {
     setLoading(true);
     const [modelsRes, predsRes] = await Promise.all([
-      api.get("/api/v1/ai/models"),
-      api.get("/api/v1/ai/predictions"),
+      api.get("/v1/ai/models"),
+      api.get("/v1/ai/predictions"),
     ]);
     setModels(modelsRes.data?.data ?? []);
     setPredictions(predsRes.data?.data ?? []);

@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -11,6 +12,7 @@ from app.services.ai.agents.market_agent import MarketAgent
 from app.services.ai.agents.risk_agent import RiskAgent
 from app.services.ai.agents.sentiment_agent import SentimentAgent
 
+logger = logging.getLogger(__name__)
 
 _AGENTS = [MarketAgent(), RiskAgent(), SentimentAgent()]
 
@@ -35,8 +37,8 @@ class AgentCoordinator:
                 if out:
                     out.setdefault("symbol", symbol)
                     results.append(out)
-            except Exception:
-                continue
+            except Exception as exc:
+                logger.exception("agent_failed_graceful_degradation", agent=agent.name, symbol=symbol, error=str(exc))
         return results
 
     def _save_decisions(self, symbol: str, results: list[dict]) -> None:
@@ -78,15 +80,16 @@ class AgentCoordinator:
 
 
 def run_multi_agent_decision(symbol: str, df: pd.DataFrame | None = None, limit: int = 64) -> dict | None:
+    coordinator_db: Session | None = None
     if df is None:
-        db = next(get_db())
+        coordinator_db = next(get_db())
         try:
             from app.database.models.market import Candle, MarketPair
-            pair = db.query(MarketPair).filter(MarketPair.symbol == symbol).first()
+            pair = coordinator_db.query(MarketPair).filter(MarketPair.symbol == symbol).first()
             if not pair:
                 return None
             rows = (
-                db.query(Candle)
+                coordinator_db.query(Candle)
                 .filter(Candle.market_pair_id == pair.id)
                 .order_by(Candle.open_time.desc())
                 .limit(limit)
@@ -108,6 +111,10 @@ def run_multi_agent_decision(symbol: str, df: pd.DataFrame | None = None, limit:
                 ]
             )
         finally:
-            db.close()
+            coordinator_db.close()
+
     coordinator = AgentCoordinator(db=next(get_db()))
-    return coordinator.run(symbol, df)
+    try:
+        return coordinator.run(symbol, df)
+    finally:
+        coordinator.db.close()
