@@ -26,3 +26,4 @@ coverage/
 .idea/
 backups/*.tar.gz
 *.joblib
+.docker/

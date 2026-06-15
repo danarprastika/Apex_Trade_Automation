@@ -1,15 +1,16 @@
+import asyncio
 import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from dotenv import load_dotenv
 
-from telegram_bot.handlers.start import start_router
-from telegram_bot.handlers.help import help_router
-from telegram_bot.handlers.status import status_router
+from handlers.help import router as help_router
+from handlers.start import router as start_router
+from handlers.status import router as status_router
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -32,5 +33,12 @@ def create_dispatcher() -> Dispatcher:
     return dispatcher
 
 
-bot = create_bot()
-dispatcher = create_dispatcher()
+async def main() -> None:
+    bot = create_bot()
+    dispatcher = create_dispatcher()
+    logging.info("Telegram bot started")
+    await dispatcher.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

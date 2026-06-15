@@ -1,38 +1,42 @@
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuthStore } from "@/store/authStore";
 import { api } from "@/services/api";
 
-export default function Login() {
+export default function Register() {
   const navigate = useNavigate();
-  const setSession = useAuthStore((s) => s.setSession);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setSuccess(null);
+
+    if (password !== confirmPassword) {
+      setError("Konfirmasi password tidak sama.");
+      return;
+    }
+
     setLoading(true);
 
-    const formData = new URLSearchParams();
-    formData.append("username", email.trim());
-    formData.append("password", password);
-
     try {
-      const { data: payload } = await api.post("/api/v1/login", formData.toString(), {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+      await api.post(
+        "/api/v1/register",
+        JSON.stringify({ email: email.trim(), password }),
+        {
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
-      const token = payload?.access_token as string | undefined;
-      if (!token) throw new Error("Token tidak diterima dari server.");
-
-      localStorage.setItem("apex_access_token", token);
-      setSession(token, null);
-      navigate("/dashboard", { replace: true });
+      setSuccess("Registrasi berhasil. Mengalihkan ke halaman login...");
+      setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (err) {
-      setError(extractLoginErrorMessage(err));
+      const message = extractErrorMessage(err, "Registrasi gagal. Periksa kembali email dan password.");
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -41,10 +45,11 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
       <form onSubmit={onSubmit} className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-lg">
-        <h1 className="mb-2 text-center text-2xl font-semibold text-white">Masuk ke APEX</h1>
-        <p className="mb-6 text-center text-sm text-slate-400">Gunakan email dan password akun Anda.</p>
+        <h1 className="mb-2 text-center text-2xl font-semibold text-white">Buat Akun APEX</h1>
+        <p className="mb-6 text-center text-sm text-slate-400">Daftar untuk mengakses dashboard utama.</p>
 
         {error ? <p className="mb-4 rounded-md border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</p> : null}
+        {success ? <p className="mb-4 rounded-md border border-green-800 bg-green-950/40 p-3 text-sm text-green-300">{success}</p> : null}
 
         <label className="mb-2 block text-sm text-slate-300">Email</label>
         <input
@@ -61,9 +66,21 @@ export default function Login() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           required
+          minLength={8}
+          type="password"
+          className="mb-4 w-full rounded-md border border-slate-800 bg-slate-950 p-2 text-white outline-none focus:border-slate-500"
+          placeholder="Minimal 8 karakter"
+        />
+
+        <label className="mb-2 block text-sm text-slate-300">Konfirmasi Password</label>
+        <input
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          required
+          minLength={8}
           type="password"
           className="mb-6 w-full rounded-md border border-slate-800 bg-slate-950 p-2 text-white outline-none focus:border-slate-500"
-          placeholder="Password"
+          placeholder="Ulangi password"
         />
 
         <button
@@ -71,13 +88,13 @@ export default function Login() {
           disabled={loading}
           className="w-full rounded-md bg-white p-2 font-medium text-slate-900 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Masuk..." : "Login"}
+          {loading ? "Mendaftar..." : "Register"}
         </button>
 
         <p className="mt-5 text-center text-sm text-slate-400">
-          Belum punya akun?{" "}
-          <Link to="/register" className="font-medium text-white hover:text-slate-300">
-            Register
+          Sudah punya akun?{" "}
+          <Link to="/login" className="font-medium text-white hover:text-slate-300">
+            Login
           </Link>
         </p>
       </form>
@@ -85,19 +102,11 @@ export default function Login() {
   );
 }
 
-function extractLoginErrorMessage(err: unknown) {
-  const response = err as { response?: { status?: number; data?: { detail?: string } }; message?: string } | undefined;
-  const status = response?.response?.status;
+function extractErrorMessage(err: unknown, fallback: string) {
+  const response = err as { response?: { data?: { detail?: string } }; message?: string } | undefined;
   const detail = response?.response?.data?.detail;
 
-  if (status === 404) return "Email belum terdaftar.";
-  if (status === 401) {
-    if (detail === "Email belum terdaftar") return "Email belum terdaftar.";
-    if (detail === "Password salah") return "Password salah.";
-    return "Email atau password salah.";
-  }
-  if (status === 422) return "Format email atau password tidak valid.";
   if (typeof detail === "string") return detail;
   if (typeof response?.message === "string") return response.message;
-  return "Login gagal. Periksa koneksi atau kredensial Anda.";
+  return fallback;
 }

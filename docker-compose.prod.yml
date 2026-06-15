@@ -2,13 +2,17 @@ services:
   postgres:
     image: postgres:16
     container_name: apex-postgres
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - apex_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -18,10 +22,14 @@ services:
   redis:
     image: redis:7
     container_name: apex-redis
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
+    networks:
+      - apex_net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -30,10 +38,12 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: apex-backend
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,8 +52,8 @@ services:
     environment:
       APP_ENV: production
       DEBUG: "false"
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-      REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}/0
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: ${JWT_ALGORITHM}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
@@ -54,11 +64,12 @@ services:
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
       OLLAMA_API_URL: ${OLLAMA_API_URL:-http://ollama:11434}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
       IS_LIVE_TRADING: ${IS_LIVE_TRADING:-false}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    networks:
+      - apex_net
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
       interval: 10s
@@ -73,14 +84,19 @@ services:
       context: ./telegram-bot
       dockerfile: Dockerfile
     container_name: apex-telegram
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     depends_on:
       backend:
         condition: service_healthy
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      API_BASE_URL: ${API_BASE_URL:-http://backend:8000}
+      BACKEND_URL: http://backend:8000
+      API_BASE_URL: http://backend:8000
     command: python bot.py
+    networks:
+      - apex_net
     volumes:
       - ./logs/telegram:/app/logs
 
@@ -89,12 +105,66 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: apex-frontend
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     depends_on:
-      - backend
-    volumes:
-      - ./logs/frontend:/usr/share/nginx/html/logs
+      backend:
+        condition: service_healthy
+    networks:
+      - apex_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  ciso-dashboard:
+    build:
+      context: ./ciso-dashboard
+      dockerfile: Dockerfile
+    container_name: apex-ciso
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://apex:apex_password@postgres:5432/apex_db}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    networks:
+      - apex_net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('localhost', 8501), 5); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  web-gateway:
+    build:
+      context: ./docker/nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      ciso-dashboard:
+        condition: service_healthy
+    networks:
+      - apex_net
 
 volumes:
   postgres-data:
   redis-data:
+
+networks:
+  apex_net:
+    driver: bridge

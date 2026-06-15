@@ -15,7 +15,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from app.database.base import Base
-from app.database.models import identity, exchange, market, trading, risk, audit, backtest, ai_memory
+from app.database.models import identity, exchange, market, trading, risk, audit, backtest, ai_memory, agents
 target_metadata = Base.metadata
 
 from app.core.config.settings import settings

@@ -1,10 +1,12 @@
-import { Link } from "react-router-dom"
+import { Link } from "react-router-dom";
+import SystemStatusBadge from "./SystemStatusBadge";
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/portfolio', label: 'Portfolio' },
+  { to: '/ciso-dashboard', label: 'AI Intelligence Center' },
   { to: '/settings', label: 'Settings' },
-]
+];
 
 export function TopNav() {
   return (
@@ -15,12 +17,13 @@ export function TopNav() {
         </Link>
         <nav className="flex items-center gap-6 text-sm text-slate-300">
           {NAV.map((item) => (
-            <Link key={item.to} to={item.to} className="hover:text-white">
+            <Link key={item.to} to={item.to} className="hover:text-white transition-colors">
               {item.label}
             </Link>
           ))}
         </nav>
+        <SystemStatusBadge />
       </div>
     </header>
-  )
+  );
 }

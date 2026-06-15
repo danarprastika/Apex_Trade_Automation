@@ -14,6 +14,7 @@ from app.api.market.router import router as market_router
 from app.api.trading.backtest_router import router as backtest_router
 from app.core.rate_limit import limiter
 from app.database.session import ensure_runtime_indexes
+from app.startup_tasks import run_startup_tasks
 from app.tasks.schedulers.market_scheduler import market_scheduler
 from app.core.config.settings import settings
 
@@ -37,11 +38,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    run_startup_tasks()
+    
     try:
         ensure_runtime_indexes()
     except Exception:
         logger.exception("database_index_initialization_failed")
-
+    
     market_scheduler.start()
     yield
     market_scheduler.shutdown()

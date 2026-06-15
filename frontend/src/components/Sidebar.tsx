@@ -5,6 +5,7 @@ const NAV = [
   { to: "/portfolio", label: "Portfolio" },
   { to: "/trading", label: "Trading" },
   { to: "/intelligence", label: "Intelligence" },
+  { to: "/ciso-dashboard", label: "AI Intelligence Center" },
   { to: "/settings", label: "Settings" },
 ];
 
